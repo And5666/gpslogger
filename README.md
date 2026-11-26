@@ -1,3 +1,62 @@
+# GPSLogger: personal fork
+
+This is a personal fork of [mendhak/gpslogger](https://github.com/mendhak/gpslogger), used to log
+locations to a self-hosted [Dawarich](https://dawarich.app/) server. It adds a smart stationary mode
+and fixes a bug in the Dawarich upload queue. Changes are not intended for upstream, and there are
+no prebuilt releases; build it yourself (see below).
+
+## What's different from upstream
+
+### Smart stationary mode
+
+Logging every few seconds while you sit at home or at your desk fills Dawarich with near-identical
+points. Smart stationary mode slows logging down when you aren't moving, and speeds it back up as soon
+as you do.
+
+- When a number of points in a row (default 5) stay within a radius (default 50 m) of the first one,
+  the app counts you as stationary.
+- While stationary it logs one point at a slower interval (default every 10 minutes), and turns the
+  GPS off between points, even if "Keep GPS on between fixes" is enabled.
+- If the phone's significant motion sensor detects movement, the app takes a location immediately
+  instead of waiting for the next slow point.
+- Any point outside the radius switches straight back to your normal logging interval.
+
+Find it under **Settings → Performance → Smart stationary mode**. All four settings are saved per profile.
+
+Things to know:
+
+- Indoor GPS can drift 20–50 m. If the radius is smaller than that, the app may keep dropping back to
+  the normal interval.
+- Set the **Distance filter** to 0. Otherwise the points logged while stationary are discarded.
+- Leave the older **Only log if there is significant motion** option off when using this.
+- Phones without a significant motion sensor still work, but only check at the slow interval.
+
+### Dawarich upload fix
+
+If the GPS reported a horizontal dilution of precision (HDOP) of 0, the calculated vertical accuracy
+became infinite. The JSON library refuses that value, so every upload attempt failed and the whole
+Dawarich queue stopped sending for good. Now:
+
+- vertical accuracy is left out when it can't be calculated
+- each point is checked before upload, so one bad point is skipped instead of blocking the queue
+- points without DOP data no longer send `vertical_accuracy: 0`
+
+## Building
+
+You need JDK 17 (the Gradle version used here doesn't run on newer JDKs) and the Android SDK with
+platform 35 and build-tools 34.0.0. Point `JAVA_HOME` and `ANDROID_HOME` at them, then run:
+
+```bash
+./gradlew :gpslogger:testDebugUnitTest :gpslogger:assembleDebug
+```
+
+The APK is written to `gpslogger/build/outputs/apk/debug/gpslogger-debug.apk`. The debug build has its own
+app ID, so it installs alongside the official GPSLogger with separate settings.
+
+---
+
+*Everything below is the original upstream README.*
+
 GPSLogger  [![githubactions](https://github.com/mendhak/gpslogger/workflows/Android%20CI/badge.svg)](https://github.com/mendhak/gpslogger/actions) [![pgp](assets/pgp.png)](https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x95e7d75c76cbe9a9) [![Weblate](https://hosted.weblate.org/widgets/gpslogger/-/android/svg-badge.svg)](https://hosted.weblate.org/engage/gpslogger/)
 =========
 
