@@ -201,4 +201,25 @@ public class StationaryDetectorTest {
         double centre = northOfStart(s.anchorLat);
         assertThat("centre " + centre, centre > 4.9 && centre < 5.1, is(true));
     }
+
+    // Rough fixes (accuracy worse than the radius) can't end stationary mode
+    @Test
+    public void roughFixesOutsideRadius_DoNotEndStationary() {
+        StationaryDetector.State s = StationaryDetector.State.initial();
+        for (int i = 0; i < 3; i++) s = feed(s, 0, 3);
+        assertThat(s.isSettled(), is(true));
+        s = feed(s, 200, 120, 3);
+        s = feed(s, 220, 150, 3);
+        assertThat(s.isSettled(), is(true));
+        assertThat(s.strike, is(false));
+    }
+
+    @Test
+    public void accurateFixesOutsideRadius_StillEndStationary() {
+        StationaryDetector.State s = StationaryDetector.State.initial();
+        for (int i = 0; i < 3; i++) s = feed(s, 0, 3);
+        s = feed(s, 200, 10, 3);
+        s = feed(s, 230, 10, 3);
+        assertThat(s.stationary, is(false));
+    }
 }

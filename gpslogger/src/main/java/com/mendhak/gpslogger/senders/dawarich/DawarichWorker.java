@@ -48,9 +48,17 @@ public class DawarichWorker extends Worker {
     @Override
     public ListenableWorker.Result doWork() {
         uploading = true;
-        QueueWidgetProvider.refresh(getApplicationContext());
-        Result result = upload();
-        uploading = false;
+        Result result;
+        try {
+            QueueWidgetProvider.refresh(getApplicationContext());
+            result = upload();
+        } catch (RuntimeException e) {
+            // Never crash the worker or leave the widget stuck on "Sending"; try again later
+            LOG.error("Dawarich: unexpected error while uploading, will retry", e);
+            result = Result.retry();
+        } finally {
+            uploading = false;
+        }
 
         Context context = getApplicationContext();
         if (result instanceof Result.Success) {
