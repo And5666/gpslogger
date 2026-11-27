@@ -2,8 +2,9 @@
 
 This is a personal fork of [mendhak/gpslogger](https://github.com/mendhak/gpslogger), used to log
 locations to a self-hosted [Dawarich](https://dawarich.app/) server. It adds a smart stationary mode
-and fixes a bug in the Dawarich upload queue. Changes are not intended for upstream, and there are
-no prebuilt releases; build it yourself (see below).
+with a night-time deep sleep, home screen widgets, and fixes to the Dawarich uploads and the Fused
+location provider. Changes are not intended for upstream. Debug APKs are on the
+[releases page](https://github.com/And5666/gpslogger/releases), or build it yourself (see below).
 
 ## What's different from upstream
 
@@ -13,15 +14,20 @@ Logging every few seconds while you sit at home or at your desk fills Dawarich w
 points. Smart stationary mode slows logging down when you aren't moving, and speeds it back up as soon
 as you do.
 
-- When a number of points in a row (default 5) stay within a radius (default 50 m) of the first one,
-  the app counts you as stationary.
+- When a number of points in a row (default 5) stay within a radius (default 50 m) of the centre of
+  the recent points, the app counts you as stationary. The centre is an average weighted by each
+  fix's accuracy, so one inaccurate fix doesn't put it in the wrong place.
 - While stationary it logs one point at a slower interval (default every 10 minutes), and turns the
   GPS off between points, even if "Keep GPS on between fixes" is enabled.
 - If the phone's significant motion sensor detects movement, the app takes a location immediately
   instead of waiting for the next slow point.
-- Any point outside the radius switches straight back to your normal logging interval.
+- One point outside the radius could be GPS drift, so the app checks again at the normal interval.
+  If that point is outside too, it switches back to normal logging; if it's back inside, nothing
+  changes.
+- Once you're stationary, the centre can't move more than half the radius, so moving slowly can't
+  drag it along with you.
 
-Find it under **Settings → Performance → Smart stationary mode**. All four settings are saved per profile.
+Find it under **Settings → Performance → Smart stationary mode**. All settings are saved per profile.
 
 Things to know:
 
@@ -31,15 +37,46 @@ Things to know:
 - Leave the older **Only log if there is significant motion** option off when using this.
 - Phones without a significant motion sensor still work, but only check at the slow interval.
 
-### Dawarich upload fix
+### Deep sleep
 
-If the GPS reported a horizontal dilution of precision (HDOP) of 0, the calculated vertical accuracy
-became infinite. The JSON library refuses that value, so every upload attempt failed and the whole
-Dawarich queue stopped sending for good. Now:
+An optional night mode on top of smart stationary mode. Between set times (default 23:00 to 07:00),
+once you've been within the radius for long enough (default 60 minutes), it logs only every few hours
+(default 5). The last check is cut short so one happens just after the window ends, and normal
+stationary checks resume. Significant motion still triggers a check, so leaving at night is still
+caught.
 
-- vertical accuracy is left out when it can't be calculated
-- each point is checked before upload, so one bad point is skipped instead of blocking the queue
-- points without DOP data no longer send `vertical_accuracy: 0`
+### Home screen widgets
+
+- **GPSLogger Dawarich queue**: how many points are waiting to go to Dawarich, when they were last
+  sent, a **Send now** button that skips any retry wait, and a deep sleep switch (shown when smart
+  mode is on).
+- **Dawarich week**: the last seven days from your Dawarich server: total distance, points, current
+  streak, today's distance and points, and a bar per day. It uses the server and API key from
+  GPSLogger's Dawarich settings, and refreshes every 30 minutes, after GPSLogger sends points, and when
+  you tap ↻. It needs a Dawarich version with the insights API (February 2026 or later). Daily
+  distances come from Dawarich's stats, which it updates in the background, so today's distance can
+  lag behind the point count.
+
+### Dawarich upload fixes
+
+- If the GPS reported a horizontal dilution of precision (HDOP) of 0, the calculated vertical accuracy
+  became infinite. The JSON library refuses that value, so every upload failed and the whole queue
+  stopped for good. Vertical accuracy is now left out when it can't be calculated, and each point is
+  checked before upload, so one bad point is skipped instead of blocking the queue. Points without
+  DOP data no longer send `vertical_accuracy: 0`.
+- An automatic send now also uploads the Dawarich queue when Dawarich is the only target.
+- The maximum batch size dialog showed the minimum value. Both batch sizes are now required numbers.
+- Spaces and a trailing `/` in the server address and API key are removed, and the address must
+  start with `http://` or `https://`. A bad address now shows an error in the log instead of failing
+  silently.
+- The log now shows each upload step: points queued, upload scheduled, how many are being sent.
+
+### Fused location fix
+
+With only **Fused** selected, every fix was discarded. Android's fused provider can pass on the
+underlying fix with the provider name `gps` or `network`, and the app judged fixes by that name.
+Fixes are now judged by the listener they arrived on. A warning is logged if Fused is selected but the
+phone doesn't support it (Android 12+ is needed).
 
 ## Building
 
