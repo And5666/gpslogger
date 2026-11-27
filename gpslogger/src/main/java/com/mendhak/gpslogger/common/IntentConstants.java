@@ -24,6 +24,7 @@ public class IntentConstants {
     public final static String IMMEDIATE_START =  "immediatestart";
     public static final String AUTOSEND_NOW = "immediateautosend";
     public static final String GET_NEXT_POINT = "getnextpoint";
+    public static final String SMART_SETTINGS_CHANGED = "smartsettingschanged";
     public static final String SET_DESCRIPTION = "setnextpointdescription";
     public static final String PREFER_CELLTOWER = "setprefercelltower";
     public static final String LOG_GPS = "setloggpsprovider";

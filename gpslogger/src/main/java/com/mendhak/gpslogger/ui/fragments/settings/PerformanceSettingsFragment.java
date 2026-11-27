@@ -19,11 +19,13 @@
 
 package com.mendhak.gpslogger.ui.fragments.settings;
 
+import android.app.TimePickerDialog;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.format.DateFormat;
 import androidx.annotation.NonNull;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
@@ -32,9 +34,11 @@ import androidx.preference.SwitchPreferenceCompat;
 import com.mendhak.gpslogger.BuildConfig;
 import com.mendhak.gpslogger.R;
 import com.mendhak.gpslogger.common.AppSettings;
+import com.mendhak.gpslogger.common.DeepSleepWindow;
 import com.mendhak.gpslogger.common.PreferenceHelper;
 import com.mendhak.gpslogger.common.PreferenceNames;
 import com.mendhak.gpslogger.common.Strings;
+import com.mendhak.gpslogger.widgets.QueueWidgetProvider;
 import eltos.simpledialogfragment.SimpleDialog;
 import eltos.simpledialogfragment.form.Input;
 import eltos.simpledialogfragment.form.SimpleFormDialog;
@@ -77,6 +81,10 @@ public class PerformanceSettingsFragment
         findPreference(PreferenceNames.SMART_STATIONARY_RADIUS).setOnPreferenceClickListener(this);
         findPreference(PreferenceNames.SMART_STATIONARY_COUNT).setOnPreferenceClickListener(this);
         findPreference(PreferenceNames.SMART_STATIONARY_INTERVAL).setOnPreferenceClickListener(this);
+        findPreference(PreferenceNames.SMART_DEEP_SLEEP_START).setOnPreferenceClickListener(this);
+        findPreference(PreferenceNames.SMART_DEEP_SLEEP_END).setOnPreferenceClickListener(this);
+        findPreference(PreferenceNames.SMART_DEEP_SLEEP_AFTER).setOnPreferenceClickListener(this);
+        findPreference(PreferenceNames.SMART_DEEP_SLEEP_INTERVAL).setOnPreferenceClickListener(this);
         setSmartStationarySummaries();
 
         if(Build.VERSION.SDK_INT < Build.VERSION_CODES.S){
@@ -94,6 +102,13 @@ public class PerformanceSettingsFragment
             significantMotionSwitch.setEnabled(false);
             findPreference(PreferenceNames.SIGNIFICANT_MOTION_BYPASS_INTERVAL).setEnabled(false);
         }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        // The queue widget shows the deep sleep switch only while smart mode is on
+        QueueWidgetProvider.refresh(requireContext());
     }
 
     @Override
@@ -248,6 +263,28 @@ public class PerformanceSettingsFragment
             return true;
         }
 
+        if(preference.getKey().equalsIgnoreCase(PreferenceNames.SMART_DEEP_SLEEP_START)){
+            showDeepSleepTimePicker(true);
+            return true;
+        }
+
+        if(preference.getKey().equalsIgnoreCase(PreferenceNames.SMART_DEEP_SLEEP_END)){
+            showDeepSleepTimePicker(false);
+            return true;
+        }
+
+        if(preference.getKey().equalsIgnoreCase(PreferenceNames.SMART_DEEP_SLEEP_AFTER)){
+            showSmartStationaryDialog(PreferenceNames.SMART_DEEP_SLEEP_AFTER, R.string.time_in_minutes_dialog_title,
+                    R.string.smart_deep_sleep_after_summary, preferenceHelper.getSmartDeepSleepAfter());
+            return true;
+        }
+
+        if(preference.getKey().equalsIgnoreCase(PreferenceNames.SMART_DEEP_SLEEP_INTERVAL)){
+            showSmartStationaryDialog(PreferenceNames.SMART_DEEP_SLEEP_INTERVAL, R.string.time_in_minutes_dialog_title,
+                    R.string.smart_deep_sleep_interval_summary, preferenceHelper.getSmartDeepSleepInterval());
+            return true;
+        }
+
         return false;
     }
 
@@ -330,6 +367,18 @@ public class PerformanceSettingsFragment
             return true;
         }
 
+        if(dialogTag.equalsIgnoreCase(PreferenceNames.SMART_DEEP_SLEEP_AFTER)){
+            preferenceHelper.setSmartDeepSleepAfter(Strings.toInt(extras.getString(PreferenceNames.SMART_DEEP_SLEEP_AFTER), 60));
+            setSmartStationarySummaries();
+            return true;
+        }
+
+        if(dialogTag.equalsIgnoreCase(PreferenceNames.SMART_DEEP_SLEEP_INTERVAL)){
+            preferenceHelper.setSmartDeepSleepInterval(Strings.toInt(extras.getString(PreferenceNames.SMART_DEEP_SLEEP_INTERVAL), 300));
+            setSmartStationarySummaries();
+            return true;
+        }
+
         return false;
     }
 
@@ -347,6 +396,19 @@ public class PerformanceSettingsFragment
                 .show(this, key);
     }
 
+    private void showDeepSleepTimePicker(boolean start) {
+        int current = start ? preferenceHelper.getSmartDeepSleepStart() : preferenceHelper.getSmartDeepSleepEnd();
+        new TimePickerDialog(requireContext(), (view, hourOfDay, minute) -> {
+            int minuteOfDay = hourOfDay * 60 + minute;
+            if (start) {
+                preferenceHelper.setSmartDeepSleepStart(minuteOfDay);
+            } else {
+                preferenceHelper.setSmartDeepSleepEnd(minuteOfDay);
+            }
+            setSmartStationarySummaries();
+        }, current / 60, current % 60, DateFormat.is24HourFormat(requireContext())).show();
+    }
+
     private void setSmartStationarySummaries() {
         // The getters clamp the values, so the summary shows what will actually be used
         // The warnings sit under the values so they're visible without opening the dialogs
@@ -355,5 +417,15 @@ public class PerformanceSettingsFragment
         findPreference(PreferenceNames.SMART_STATIONARY_COUNT).setSummary(String.valueOf(preferenceHelper.getSmartStationaryCount()) + " " + getString(R.string.smart_stationary_count_points));
         findPreference(PreferenceNames.SMART_STATIONARY_INTERVAL).setSummary(String.valueOf(preferenceHelper.getSmartStationaryInterval()) + getString(R.string.minutes)
                 + "\n" + getString(R.string.smart_stationary_interval_hint));
+
+        int start = preferenceHelper.getSmartDeepSleepStart();
+        int end = preferenceHelper.getSmartDeepSleepEnd();
+        String sameTimes = start == end ? "\n" + getString(R.string.smart_deep_sleep_same_times) : "";
+        findPreference(PreferenceNames.SMART_DEEP_SLEEP_START).setSummary(DeepSleepWindow.format(start) + sameTimes);
+        findPreference(PreferenceNames.SMART_DEEP_SLEEP_END).setSummary(DeepSleepWindow.format(end) + sameTimes);
+        findPreference(PreferenceNames.SMART_DEEP_SLEEP_AFTER).setSummary(String.valueOf(preferenceHelper.getSmartDeepSleepAfter()) + getString(R.string.minutes)
+                + "\n" + getString(R.string.smart_deep_sleep_after_summary));
+        findPreference(PreferenceNames.SMART_DEEP_SLEEP_INTERVAL).setSummary(String.valueOf(preferenceHelper.getSmartDeepSleepInterval()) + getString(R.string.minutes)
+                + "\n" + getString(R.string.smart_deep_sleep_interval_summary));
     }
 }

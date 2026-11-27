@@ -180,5 +180,10 @@ public  class PreferenceNames {
     public static final String SMART_STATIONARY_RADIUS = "smart_stationary_radius";
     public static final String SMART_STATIONARY_COUNT = "smart_stationary_count";
     public static final String SMART_STATIONARY_INTERVAL = "smart_stationary_interval";
+    public static final String SMART_DEEP_SLEEP_ENABLED = "smart_deep_sleep_enabled";
+    public static final String SMART_DEEP_SLEEP_START = "smart_deep_sleep_start";
+    public static final String SMART_DEEP_SLEEP_END = "smart_deep_sleep_end";
+    public static final String SMART_DEEP_SLEEP_AFTER = "smart_deep_sleep_after";
+    public static final String SMART_DEEP_SLEEP_INTERVAL = "smart_deep_sleep_interval";
 
 }

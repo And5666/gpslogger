@@ -61,6 +61,7 @@ import org.slf4j.Logger;
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 
 @SuppressLint("MissingPermission")
@@ -225,6 +226,11 @@ public class GpsLoggingService extends Service  {
                 if (bundle.getBoolean(IntentConstants.GET_NEXT_POINT)) {
                     LOG.info("Intent received - Get Next Point");
                     needToStartGpsManager = true;
+                    if (isSmartStationaryActive()) {
+                        // A stationary check is due. Mark it so the time filter doesn't turn the fix away,
+                        // the deep sleep interval can end early at the end of the window.
+                        session.setSmartCheckPending(true);
+                    }
                 }
 
                 if (bundle.getString(IntentConstants.SET_DESCRIPTION) != null) {
@@ -352,6 +358,16 @@ public class GpsLoggingService extends Service  {
                     needToStartGpsManager = false;
                 }
 
+                if (bundle.getBoolean(IntentConstants.SMART_SETTINGS_CHANGED)) {
+                    LOG.info("Intent received - smart mode settings changed");
+                    // Between stationary checks the next alarm may be hours away; reschedule it with the
+                    // new settings. A check that's running reschedules itself when it ends.
+                    if (session.isStarted() && isSmartStationaryActive() && !session.isSmartCheckPending()) {
+                        updateDeepSleepState();
+                        setAlarmForNextPoint();
+                    }
+                }
+
                 if (needToStartGpsManager && session.isStarted()) {
                     startGpsManager();
                 }
@@ -438,6 +454,12 @@ public class GpsLoggingService extends Service  {
     private void autoSendLogFile(@Nullable String formattedFileName) {
 
         LOG.debug("Filename: " + formattedFileName);
+
+        if (preferenceHelper.shouldLogToDawarich()) {
+            // Dawarich logs to a queue rather than a file, so the file-based auto send below never reaches it.
+            // Flush it here so points below the bulk minimum still go out on the auto send interval.
+            new DawarichManager(preferenceHelper).uploadQueue();
+        }
 
         if ( !Strings.isNullOrEmpty(formattedFileName) || !Strings.isNullOrEmpty(Strings.getFormattedFileName()) ) {
             String fileToSend = Strings.isNullOrEmpty(formattedFileName) ? Strings.getFormattedFileName() : formattedFileName;
@@ -744,15 +766,15 @@ public class GpsLoggingService extends Service  {
         }
 
         if (gpsLocationListener == null) {
-            gpsLocationListener = new GeneralLocationListener(this, "GPS");
+            gpsLocationListener = new GeneralLocationListener(this, ProviderFilter.LISTENER_GPS);
         }
 
         if (networkLocationListener == null) {
-            networkLocationListener = new GeneralLocationListener(this, "CELL");
+            networkLocationListener = new GeneralLocationListener(this, ProviderFilter.LISTENER_CELL);
         }
 
         if (fusedLocationlistener == null) {
-            fusedLocationlistener = new GeneralLocationListener(this, "FUSED");
+            fusedLocationlistener = new GeneralLocationListener(this, ProviderFilter.LISTENER_FUSED);
         }
 
         // Only one callback: stopGpsManager unregisters just this one, and this method runs again for every point
@@ -801,6 +823,10 @@ public class GpsLoggingService extends Service  {
         fusedLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
         checkProviderStatus();
+
+        if (preferenceHelper.shouldLogFusedLocations() && !session.isFusedEnabled()) {
+            LOG.warn("Fused is selected, but Android reports the fused location provider as unavailable, so it won't be used");
+        }
 
         if (session.isFusedEnabled() && preferenceHelper.shouldLogFusedLocations() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             LOG.info("Requesting Fused location updates");
@@ -1273,29 +1299,20 @@ public class GpsLoggingService extends Service  {
     }
 
     private boolean isFromSelectedListener(Location loc) {
+        String listenerName = loc.getExtras() == null ? null : loc.getExtras().getString(BundleConstants.LISTENER);
+        boolean isPassive = loc.getExtras() != null && loc.getExtras().getBoolean(BundleConstants.PASSIVE);
 
-        if(!preferenceHelper.shouldLogSatelliteLocations() && !preferenceHelper.shouldLogNetworkLocations() && !preferenceHelper.shouldLogFusedLocations()){
-            // Special case - if satellite, fused, and network are deselected, but passive is selected, then accept all passive types!
-            return preferenceHelper.shouldLogPassiveLocations();
+        boolean accepted = ProviderFilter.isFromSelectedListener(listenerName, loc.getProvider(), isPassive,
+                preferenceHelper.shouldLogSatelliteLocations(), preferenceHelper.shouldLogNetworkLocations(),
+                preferenceHelper.shouldLogFusedLocations(), preferenceHelper.shouldLogPassiveLocations(),
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S);
+
+        if (!accepted) {
+            // Info level so it shows in the app's log: a silent rejection here looks like "never gets a fix"
+            LOG.info("Ignoring a fix from provider '{}' (listener '{}'), it isn't one of the selected location providers",
+                    loc.getProvider(), listenerName);
         }
-
-        String providerName = loc.getProvider();
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-                && providerName.equalsIgnoreCase(LocationManager.FUSED_PROVIDER)
-                && preferenceHelper.shouldLogFusedLocations()){
-            return true;
-        }
-
-        if (providerName.equalsIgnoreCase(LocationManager.GPS_PROVIDER) && preferenceHelper.shouldLogSatelliteLocations()){
-            return true;
-        }
-
-        if (providerName.equalsIgnoreCase(LocationManager.NETWORK_PROVIDER) && preferenceHelper.shouldLogNetworkLocations()){
-            return true;
-        }
-
-        return false;
+        return accepted;
     }
 
     private void setDistanceTraveled(Location loc) {
@@ -1332,17 +1349,59 @@ public class GpsLoggingService extends Service  {
         }
 
         stopAbsoluteTimer();
+        updateDeepSleepState();
         setAlarmForNextPoint();
     }
 
+    /**
+     * Stationary and not double-checking a point that fell outside the radius.
+     */
     private boolean isSmartStationaryActive() {
-        return preferenceHelper.isSmartStationaryModeEnabled() && session.isSmartStationary();
+        return preferenceHelper.isSmartStationaryModeEnabled() && session.getSmartStationaryState().isSettled();
+    }
+
+    private static int secondOfDayNow() {
+        Calendar now = Calendar.getInstance();
+        return now.get(Calendar.HOUR_OF_DAY) * 3600 + now.get(Calendar.MINUTE) * 60 + now.get(Calendar.SECOND);
     }
 
     /**
-     * The interval between points: the normal one, or the longer smart mode one while stationary.
+     * Stationary, inside the deep sleep window, and within the radius for long enough.
+     */
+    private boolean isDeepSleepActive() {
+        if (!isSmartStationaryActive() || !preferenceHelper.isSmartDeepSleepEnabled()) {
+            return false;
+        }
+        if (!DeepSleepWindow.contains(preferenceHelper.getSmartDeepSleepStart(), preferenceHelper.getSmartDeepSleepEnd(), secondOfDayNow())) {
+            return false;
+        }
+        long stillForMillis = System.currentTimeMillis() - session.getSmartStationaryState().clusterStartTime;
+        return stillForMillis >= preferenceHelper.getSmartDeepSleepAfter() * 60_000L;
+    }
+
+    private void updateDeepSleepState() {
+        boolean deepSleep = isDeepSleepActive();
+        if (deepSleep == session.isSmartDeepSleep()) {
+            return;
+        }
+        session.setSmartDeepSleep(deepSleep);
+        if (deepSleep) {
+            LOG.info("Smart mode: deep sleep until {}, logging every {} min until then or until moved.",
+                    DeepSleepWindow.format(preferenceHelper.getSmartDeepSleepEnd()), preferenceHelper.getSmartDeepSleepInterval());
+        } else if (isSmartStationaryActive()) {
+            LOG.info("Smart mode: deep sleep over, logging every {} min while stationary.", preferenceHelper.getSmartStationaryInterval());
+        }
+    }
+
+    /**
+     * The interval between points: the normal one, the longer smart mode one while stationary,
+     * or the deep sleep one at night.
      */
     private int getEffectiveLoggingIntervalSeconds() {
+        if (isDeepSleepActive()) {
+            return DeepSleepWindow.intervalSeconds(preferenceHelper.getSmartDeepSleepInterval(),
+                    preferenceHelper.getSmartDeepSleepEnd(), secondOfDayNow());
+        }
         if (isSmartStationaryActive()) {
             return preferenceHelper.getSmartStationaryInterval() * 60;
         }
@@ -1357,20 +1416,27 @@ public class GpsLoggingService extends Service  {
             return;
         }
 
+        int radius = preferenceHelper.getSmartStationaryRadius();
         StationaryDetector.State previous = session.getSmartStationaryState();
         StationaryDetector.State next = StationaryDetector.next(previous, loc.getLatitude(), loc.getLongitude(),
-                preferenceHelper.getSmartStationaryRadius(), preferenceHelper.getSmartStationaryCount());
+                loc.hasAccuracy() ? loc.getAccuracy() : 0, System.currentTimeMillis(),
+                radius, preferenceHelper.getSmartStationaryCount());
         session.setSmartStationaryState(next);
+        long distance = (long) StationaryDetector.distanceFromAnchor(previous, loc.getLatitude(), loc.getLongitude());
 
         if (!previous.stationary && next.stationary) {
             LOG.info("Smart mode: {} points within {}m, stationary. Logging every {} min until moved.",
-                    next.count, preferenceHelper.getSmartStationaryRadius(), preferenceHelper.getSmartStationaryInterval());
+                    next.count, radius, preferenceHelper.getSmartStationaryInterval());
         } else if (previous.stationary && !next.stationary) {
-            LOG.info("Smart mode: moved {}m from the stationary point, back to every {}s.",
-                    (long) StationaryDetector.distanceFromAnchor(previous, loc.getLatitude(), loc.getLongitude()),
-                    preferenceHelper.getMinimumLoggingInterval());
+            LOG.info("Smart mode: two points in a row outside the radius ({}m away), moved. Back to every {}s.",
+                    distance, preferenceHelper.getMinimumLoggingInterval());
+        } else if (previous.stationary && next.strike) {
+            LOG.info("Smart mode: point {}m from the stationary point, could be GPS drift. Checking again in {}s.",
+                    distance, preferenceHelper.getMinimumLoggingInterval());
+        } else if (previous.stationary && previous.strike) {
+            LOG.info("Smart mode: back within {}m, it was GPS drift. Still stationary.", radius);
         } else if (next.stationary) {
-            LOG.debug("Smart mode: still within {}m of the stationary point", preferenceHelper.getSmartStationaryRadius());
+            LOG.debug("Smart mode: still within {}m of the stationary point", radius);
         }
     }
 

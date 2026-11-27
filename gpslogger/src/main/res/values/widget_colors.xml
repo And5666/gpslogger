@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_bg">#F7F8FA</color>
+    <color name="widget_text">#1B1C1F</color>
+    <color name="widget_subtext">#5F6368</color>
+    <color name="widget_accent">#2F6FE4</color>
+    <color name="widget_on_accent">#FFFFFF</color>
+    <!-- The chart is a bitmap, so it uses colours that read on light and dark backgrounds -->
+    <color name="widget_chart_bar">#7FA6F0</color>
+    <color name="widget_chart_today">#3B7BFF</color>
+    <color name="widget_chart_label">#8A8F98</color>
+    <color name="widget_chart_empty">#558A8F98</color>
+</resources>

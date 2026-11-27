@@ -117,7 +117,7 @@ public class DawarichFragment extends PreferenceFragmentCompat implements
                             Input.plain(PreferenceNames.DAWARICH_BASE_URL)
                                     .text(preferenceHelper.getDawarichBaseUrl())
                                     .inputType(InputType.TYPE_TEXT_FLAG_MULTI_LINE)
-                                    .validatePattern("[^\\n]+"," ")
+                                    .validatePattern("\\s*https?://[^\\s]+\\s*", getString(R.string.dawarich_url_invalid))
                                     .required()
                     )
                     .show(this, PreferenceNames.DAWARICH_BASE_URL);
@@ -161,6 +161,8 @@ public class DawarichFragment extends PreferenceFragmentCompat implements
                             Input.plain(PreferenceNames.DAWARICH_BATCH_MIN)
                                     .text(preferenceHelper.getDawarichBatchMin().toString())
                                     .inputType(InputType.TYPE_CLASS_NUMBER)
+                                    .required()
+                                    .max(5)
                     )
                     .show(this, PreferenceNames.DAWARICH_BATCH_MIN);
             return true;
@@ -173,8 +175,10 @@ public class DawarichFragment extends PreferenceFragmentCompat implements
                     .pos(R.string.ok)
                     .fields(
                             Input.plain(PreferenceNames.DAWARICH_BATCH_MAX)
-                                    .text(preferenceHelper.getDawarichBatchMin().toString())
+                                    .text(preferenceHelper.getDawarichBatchMax().toString())
                                     .inputType(InputType.TYPE_CLASS_NUMBER)
+                                    .required()
+                                    .max(5)
                     )
                     .show(this, PreferenceNames.DAWARICH_BATCH_MAX);
             return true;
@@ -213,14 +217,14 @@ public class DawarichFragment extends PreferenceFragmentCompat implements
         }
 
         if(dialogTag.equalsIgnoreCase(PreferenceNames.DAWARICH_BATCH_MIN)){
-            Integer amount = Integer.parseInt(Objects.requireNonNull(extras.getString(PreferenceNames.DAWARICH_BATCH_MIN)));
+            Integer amount = Strings.toInt(extras.getString(PreferenceNames.DAWARICH_BATCH_MIN), 3);
             preferenceHelper.setDawarichBatchMin(amount);
             findPreference(PreferenceNames.DAWARICH_BATCH_MIN).setSummary(amount.toString());
             return true;
         }
 
         if(dialogTag.equalsIgnoreCase(PreferenceNames.DAWARICH_BATCH_MAX)){
-            Integer amount = Integer.parseInt(Objects.requireNonNull(extras.getString(PreferenceNames.DAWARICH_BATCH_MAX)));
+            Integer amount = Strings.toInt(extras.getString(PreferenceNames.DAWARICH_BATCH_MAX), 10);
             preferenceHelper.setDawarichBatchMax(amount);
             findPreference(PreferenceNames.DAWARICH_BATCH_MAX).setSummary(amount.toString());
             return true;

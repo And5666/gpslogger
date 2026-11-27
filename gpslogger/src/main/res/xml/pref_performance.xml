@@ -165,6 +165,38 @@
             android:title="@string/smart_stationary_interval_title"
             app:iconSpaceReserved="false" />
 
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:dependency="smart_stationary_enabled"
+            android:key="smart_deep_sleep_enabled"
+            android:title="@string/smart_deep_sleep_enabled_title"
+            android:summary="@string/smart_deep_sleep_enabled_summary"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:dependency="smart_deep_sleep_enabled"
+            android:key="smart_deep_sleep_start"
+            android:title="@string/smart_deep_sleep_start_title"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:dependency="smart_deep_sleep_enabled"
+            android:key="smart_deep_sleep_end"
+            android:title="@string/smart_deep_sleep_end_title"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:dependency="smart_deep_sleep_enabled"
+            android:key="smart_deep_sleep_after"
+            android:title="@string/smart_deep_sleep_after_title"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:dependency="smart_deep_sleep_enabled"
+            android:key="smart_deep_sleep_interval"
+            android:title="@string/smart_deep_sleep_interval_title"
+            app:iconSpaceReserved="false" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

@@ -12,6 +12,9 @@ import com.mendhak.gpslogger.common.Strings;
 import com.mendhak.gpslogger.common.events.UploadEvents;
 import com.mendhak.gpslogger.common.slf4j.Logs;
 import de.greenrobot.event.EventBus;
+import com.mendhak.gpslogger.widgets.DawarichStatsWorker;
+import com.mendhak.gpslogger.widgets.QueueWidgetProvider;
+import com.mendhak.gpslogger.widgets.WidgetState;
 import okhttp3.*;
 import org.json.JSONException;
 import org.slf4j.Logger;
@@ -34,9 +37,34 @@ public class DawarichWorker extends Worker {
         super(context, workerParams);
     }
 
+    private static volatile boolean uploading = false;
+
+    /** Whether an upload is running right now, for the widget */
+    public static boolean isUploading() {
+        return uploading;
+    }
+
     @NonNull
     @Override
     public ListenableWorker.Result doWork() {
+        uploading = true;
+        QueueWidgetProvider.refresh(getApplicationContext());
+        Result result = upload();
+        uploading = false;
+
+        Context context = getApplicationContext();
+        if (result instanceof Result.Success) {
+            WidgetState.setUploadSucceeded(context);
+            // Give Dawarich a moment to store the points before the stats widget counts them
+            DawarichStatsWorker.refreshSoon(context, 60);
+        } else {
+            WidgetState.setUploadFailed(context);
+        }
+        QueueWidgetProvider.refresh(context);
+        return result;
+    }
+
+    private ListenableWorker.Result upload() {
         String bufferPath = getInputData().getString(BUFFER_PATH);
         if (Strings.isNullOrEmpty(bufferPath)) {
             LOG.error("No Dawarich queue file given, nothing to upload");
@@ -44,6 +72,7 @@ public class DawarichWorker extends Worker {
         }
         if (!new File(bufferPath).exists()) {
             // Don't create a queue file if Dawarich logging was never used
+            LOG.info("Dawarich: no queued points to upload");
             return Result.success();
         }
 
@@ -51,6 +80,10 @@ public class DawarichWorker extends Worker {
         SerializableFIFOBuffer<SerializableLocation> buffer = SerializableFIFOBuffer.getInstance(bufferPath);
         int batchSize = Math.max(1, preferenceHelper.getDawarichBatchMax());
         OkHttpClient httpClient = createHttpClient();
+
+        if (!buffer.isEmpty()) {
+            LOG.info("Dawarich: uploading {} queued points, oldest first, up to {} per request", buffer.getSize(), batchSize);
+        }
 
         while (!buffer.isEmpty()) {
             if (isStopped()) {
@@ -65,11 +98,18 @@ public class DawarichWorker extends Worker {
                 LOG.warn("Could not send locations to Dawarich, will retry: {}", e.getMessage());
                 EventBus.getDefault().post(new UploadEvents.Dawarich().failed(e.getMessage(), e));
                 return Result.retry();
+            } catch (RuntimeException e) {
+                // e.g. a URL without http(s):// or an API key with illegal characters. Retrying won't help,
+                // but say so in the app's log instead of letting the worker crash silently.
+                LOG.error("Could not send locations to Dawarich, check the server URL and API key: {}", e.getMessage(), e);
+                EventBus.getDefault().post(new UploadEvents.Dawarich().failed(e.getMessage(), e));
+                return Result.failure();
             }
 
             switch (outcome) {
                 case SENT:
                     buffer.remove(locations.size());
+                    QueueWidgetProvider.refresh(getApplicationContext());
                     break;
                 case DROP:
                     LOG.error("Dawarich rejected {} locations as invalid, removing them from the queue", locations.size());

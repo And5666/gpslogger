@@ -57,6 +57,22 @@ public class Session {
         prefs.edit().putString("SESSION_" + key, value).apply();
     }
 
+    private double getDouble(String key) {
+        try {
+            return Double.parseDouble(get(key, "0"));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private long getLong(String key) {
+        try {
+            return Long.parseLong(get(key, "0"));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
 
     public boolean isSmartStationary() {
         return Boolean.valueOf(get("smartStationary", "false"));
@@ -78,9 +94,18 @@ public class Session {
         return new StationaryDetector.State(
                 isSmartStationary(),
                 Boolean.valueOf(get("smartHasAnchor", "false")),
-                Double.parseDouble(get("smartAnchorLat", "0")),
-                Double.parseDouble(get("smartAnchorLon", "0")),
-                Integer.parseInt(get("smartCount", "0")));
+                getDouble("smartAnchorLat"),
+                getDouble("smartAnchorLon"),
+                Strings.toInt(get("smartCount", "0"), 0),
+                getDouble("smartWeight"),
+                getLong("smartClusterStart"),
+                getDouble("smartHomeLat"),
+                getDouble("smartHomeLon"),
+                Boolean.valueOf(get("smartStrike", "false")),
+                getDouble("smartStrikeLat"),
+                getDouble("smartStrikeLon"),
+                getDouble("smartStrikeWeight"),
+                getLong("smartStrikeTime"));
     }
 
     public void setSmartStationaryState(StationaryDetector.State state) {
@@ -89,11 +114,29 @@ public class Session {
         set("smartAnchorLat", String.valueOf(state.anchorLat));
         set("smartAnchorLon", String.valueOf(state.anchorLon));
         set("smartCount", String.valueOf(state.count));
+        set("smartWeight", String.valueOf(state.weight));
+        set("smartClusterStart", String.valueOf(state.clusterStartTime));
+        set("smartHomeLat", String.valueOf(state.homeLat));
+        set("smartHomeLon", String.valueOf(state.homeLon));
+        set("smartStrike", String.valueOf(state.strike));
+        set("smartStrikeLat", String.valueOf(state.strikeLat));
+        set("smartStrikeLon", String.valueOf(state.strikeLon));
+        set("smartStrikeWeight", String.valueOf(state.strikeWeight));
+        set("smartStrikeTime", String.valueOf(state.strikeTime));
+    }
+
+    public boolean isSmartDeepSleep() {
+        return Boolean.valueOf(get("smartDeepSleep", "false"));
+    }
+
+    public void setSmartDeepSleep(boolean deepSleep) {
+        set("smartDeepSleep", String.valueOf(deepSleep));
     }
 
     public void resetSmartStationaryState() {
         setSmartStationaryState(StationaryDetector.State.initial());
         setSmartCheckPending(false);
+        setSmartDeepSleep(false);
     }
 
     public boolean isSinglePointMode() {

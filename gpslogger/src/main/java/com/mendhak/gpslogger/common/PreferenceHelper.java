@@ -1214,7 +1214,12 @@ public class PreferenceHelper {
      */
     @ProfilePreference(name= PreferenceNames.DAWARICH_BASE_URL)
     public String getDawarichBaseUrl() {
-        return prefs.getString(PreferenceNames.DAWARICH_BASE_URL, "");
+        // Trim whitespace and trailing slashes, a pasted "https://host/" would otherwise give "//api/v1/..."
+        String url = prefs.getString(PreferenceNames.DAWARICH_BASE_URL, "").trim();
+        while (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+        return url;
     }
 
     public void setDawarichBaseUrl(String baseUrl){
@@ -1225,7 +1230,8 @@ public class PreferenceHelper {
      */
     @ProfilePreference(name= PreferenceNames.DAWARICH_APIKEY)
     public String getDawarichApikey() {
-        return prefs.getString(PreferenceNames.DAWARICH_APIKEY, "");
+        // A pasted key often has a trailing space or newline, which breaks the Authorization header
+        return prefs.getString(PreferenceNames.DAWARICH_APIKEY, "").trim();
     }
 
     public void setDawarichApikey(String apikey){
@@ -1271,7 +1277,7 @@ public class PreferenceHelper {
      */
     @ProfilePreference(name= PreferenceNames.DAWARICH_BATCH_MIN)
     public Integer getDawarichBatchMin() {
-        return Integer.parseInt(prefs.getString(PreferenceNames.DAWARICH_BATCH_MIN, "3"));
+        return Strings.toInt(prefs.getString(PreferenceNames.DAWARICH_BATCH_MIN, "3"), 3);
     }
 
     public void setDawarichBatchMin(Integer amount){
@@ -1283,7 +1289,7 @@ public class PreferenceHelper {
      */
     @ProfilePreference(name= PreferenceNames.DAWARICH_BATCH_MAX)
     public Integer getDawarichBatchMax() {
-        return Integer.parseInt(prefs.getString(PreferenceNames.DAWARICH_BATCH_MAX, "10"));
+        return Strings.toInt(prefs.getString(PreferenceNames.DAWARICH_BATCH_MAX, "10"), 10);
     }
 
     public void setDawarichBatchMax(Integer amount) {
@@ -1543,6 +1549,70 @@ public class PreferenceHelper {
 
     public void setSmartStationaryInterval(int minutes){
         prefs.edit().putString(PreferenceNames.SMART_STATIONARY_INTERVAL, String.valueOf(minutes)).apply();
+    }
+
+    /**
+     * Whether smart mode can drop to the much slower deep sleep interval at night
+     */
+    @ProfilePreference(name= PreferenceNames.SMART_DEEP_SLEEP_ENABLED)
+    public boolean isSmartDeepSleepEnabled() {
+        return prefs.getBoolean(PreferenceNames.SMART_DEEP_SLEEP_ENABLED, false);
+    }
+
+    public void setSmartDeepSleepEnabled(boolean value){
+        prefs.edit().putBoolean(PreferenceNames.SMART_DEEP_SLEEP_ENABLED, value).apply();
+    }
+
+    /**
+     * Start of the deep sleep window, in minutes after midnight (default 23:00)
+     */
+    @ProfilePreference(name= PreferenceNames.SMART_DEEP_SLEEP_START)
+    public int getSmartDeepSleepStart() {
+        return clampMinuteOfDay(Strings.toInt(prefs.getString(PreferenceNames.SMART_DEEP_SLEEP_START, "1380"), 1380));
+    }
+
+    public void setSmartDeepSleepStart(int minuteOfDay){
+        prefs.edit().putString(PreferenceNames.SMART_DEEP_SLEEP_START, String.valueOf(minuteOfDay)).apply();
+    }
+
+    /**
+     * End of the deep sleep window, in minutes after midnight (default 07:00)
+     */
+    @ProfilePreference(name= PreferenceNames.SMART_DEEP_SLEEP_END)
+    public int getSmartDeepSleepEnd() {
+        return clampMinuteOfDay(Strings.toInt(prefs.getString(PreferenceNames.SMART_DEEP_SLEEP_END, "420"), 420));
+    }
+
+    public void setSmartDeepSleepEnd(int minuteOfDay){
+        prefs.edit().putString(PreferenceNames.SMART_DEEP_SLEEP_END, String.valueOf(minuteOfDay)).apply();
+    }
+
+    private static int clampMinuteOfDay(int minute) {
+        return Math.max(0, Math.min(24 * 60 - 1, minute));
+    }
+
+    /**
+     * Minutes within the stationary radius before deep sleep can start
+     */
+    @ProfilePreference(name= PreferenceNames.SMART_DEEP_SLEEP_AFTER)
+    public int getSmartDeepSleepAfter() {
+        return Math.max(0, Strings.toInt(prefs.getString(PreferenceNames.SMART_DEEP_SLEEP_AFTER, "60"), 60));
+    }
+
+    public void setSmartDeepSleepAfter(int minutes){
+        prefs.edit().putString(PreferenceNames.SMART_DEEP_SLEEP_AFTER, String.valueOf(minutes)).apply();
+    }
+
+    /**
+     * Logging interval in minutes during deep sleep (default 5 hours)
+     */
+    @ProfilePreference(name= PreferenceNames.SMART_DEEP_SLEEP_INTERVAL)
+    public int getSmartDeepSleepInterval() {
+        return Math.max(1, Strings.toInt(prefs.getString(PreferenceNames.SMART_DEEP_SLEEP_INTERVAL, "300"), 300));
+    }
+
+    public void setSmartDeepSleepInterval(int minutes){
+        prefs.edit().putString(PreferenceNames.SMART_DEEP_SLEEP_INTERVAL, String.valueOf(minutes)).apply();
     }
 
     @SuppressWarnings("unchecked")
