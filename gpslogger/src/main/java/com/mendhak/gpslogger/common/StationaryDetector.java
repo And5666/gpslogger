@@ -114,6 +114,12 @@ public final class StationaryDetector {
             return addToCluster(state, lat, lon, w, radiusMeters, required);
         }
 
+        if (accuracyMeters > radiusMeters) {
+            // A fix less accurate than the radius (a rough Wi-Fi/cell fix) can't show
+            // that the user left; ignore it instead of counting it as a strike
+            return state;
+        }
+
         if (!state.strike) {
             // Could be GPS noise; keep the cluster and let the next point decide
             return state.withStrike(lat, lon, w, timeMillis);

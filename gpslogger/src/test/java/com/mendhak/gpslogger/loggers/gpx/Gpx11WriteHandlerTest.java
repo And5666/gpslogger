@@ -30,7 +30,7 @@ public class Gpx11WriteHandlerTest {
 
 
         assertThat("InitialXml matches", actual, is(expected));
-        assertThat("Initial XML Length is correct", actual.length(), is(554));
+        assertThat("Initial XML Length is correct", actual.length(), is(554 + String.valueOf(BuildConfig.VERSION_CODE).length() - 3)); // creator holds the version code (139 upstream)
         assertThat("Initial XML length constant is set for others to use", actual.length(), is(annotateHandler.annotateOffset));
     }
 
